@@ -1,0 +1,6 @@
+{
+  "name": "日砺知行 - 锻炼与读书打卡追踪",
+  "description": "专注日常锻炼与读书计划的打卡管理系统，支持多维记录、周报智能生成及月度进度统计与热力图分析。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
