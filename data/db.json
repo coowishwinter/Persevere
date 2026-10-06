@@ -1,6 +1,29 @@
 {
-  "habits": null,
+  "habits": [
+    {
+      "id": "habit_exercise",
+      "name": "每日锻炼",
+      "category": "exercise",
+      "unit": "次",
+      "defaultTarget": 1,
+      "iconName": "Activity",
+      "description": "每日坚持身体锻炼 (周日固定为休息日)",
+      "enabled": true,
+      "color": "#10B981"
+    },
+    {
+      "id": "habit_reading",
+      "name": "每日读书",
+      "category": "reading",
+      "unit": "次",
+      "defaultTarget": 1,
+      "iconName": "BookOpen",
+      "description": "每日沉浸读书打卡",
+      "enabled": true,
+      "color": "#3B82F6"
+    }
+  ],
   "records": {},
   "weeklyReviews": {},
-  "lastUpdated": "2026-10-05T17:48:00.000Z"
+  "lastUpdated": "2026-10-05T18:27:00.000Z"
 }

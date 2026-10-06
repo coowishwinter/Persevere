@@ -236,59 +236,69 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
         </div>
       </div>
 
-      {/* 3. Seven Day Clean Cards Grid */}
+      {/* 3. Seven Day Clean Cards Grid with Vivid Completed Highlights */}
       <div className="grid grid-cols-1 sm:grid-cols-7 gap-2.5">
         {dayRows.map((day) => (
           <div
             key={day.date}
             onClick={() => onSelectDate(day.date)}
-            className={`p-3 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between min-h-[130px] ${
+            className={`p-3 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between min-h-[140px] ${
               day.isToday
-                ? 'bg-emerald-50/40 border-emerald-400 shadow-xs ring-1 ring-emerald-400'
+                ? 'bg-emerald-50/60 border-emerald-500 shadow-md ring-2 ring-emerald-400'
                 : day.isAllDone
-                ? 'bg-white border-emerald-200 hover:border-emerald-300'
+                ? 'bg-gradient-to-b from-emerald-50/90 to-teal-50/50 border-emerald-400 shadow-xs shadow-emerald-500/15'
                 : 'bg-white border-neutral-200/80 hover:border-neutral-300'
             }`}
           >
             <div>
               <div className="flex items-center justify-between">
-                <span className="font-bold text-xs text-neutral-800 font-serif">
+                <span className={`font-bold text-xs font-serif ${day.isAllDone ? 'text-emerald-950' : 'text-neutral-800'}`}>
                   {day.dayOfWeek}
                 </span>
-                <span className="text-[10px] font-mono text-neutral-400">
+                <span className={`text-[10px] font-mono ${day.isAllDone ? 'text-emerald-700 font-semibold' : 'text-neutral-400'}`}>
                   {formatShortDate(day.date)}
                 </span>
               </div>
 
-              {/* Habit Status Badges */}
-              <div className="mt-2.5 space-y-1.5">
+              {/* Habit Status Badges (Vivid Highlights) */}
+              <div className="mt-2.5 space-y-2">
                 {/* Exercise Item */}
                 <div className="flex items-center justify-between text-[11px]">
-                  <span className="flex items-center gap-1 text-neutral-600">
+                  <span className="flex items-center gap-1 text-neutral-700 font-medium">
                     <Activity className="w-3 h-3 text-emerald-600 shrink-0" />
                     锻炼
                   </span>
                   {day.isSunday ? (
-                    <span className="text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded-xs">
-                      休息
+                    <span className="text-[10px] text-amber-800 bg-amber-100/90 border border-amber-300/80 px-1.5 py-0.5 rounded-md font-medium">
+                      周日休
                     </span>
                   ) : day.exDone ? (
-                    <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[3]" />
+                    <span className="text-[10px] text-white bg-emerald-600 px-1.5 py-0.5 rounded-md font-bold shadow-2xs flex items-center gap-0.5">
+                      <Check className="w-3 h-3 stroke-[3]" />
+                      已成
+                    </span>
                   ) : (
-                    <span className="text-neutral-300 text-[11px]">—</span>
+                    <span className="text-neutral-400 bg-neutral-100 px-1.5 py-0.5 rounded-md text-[10px]">
+                      未打卡
+                    </span>
                   )}
                 </div>
 
                 {/* Reading Item */}
                 <div className="flex items-center justify-between text-[11px]">
-                  <span className="flex items-center gap-1 text-neutral-600">
+                  <span className="flex items-center gap-1 text-neutral-700 font-medium">
                     <BookOpen className="w-3 h-3 text-blue-600 shrink-0" />
                     读书
                   </span>
                   {day.rdDone ? (
-                    <Check className="w-3.5 h-3.5 text-blue-600 stroke-[3]" />
+                    <span className="text-[10px] text-white bg-blue-600 px-1.5 py-0.5 rounded-md font-bold shadow-2xs flex items-center gap-0.5">
+                      <Check className="w-3 h-3 stroke-[3]" />
+                      已成
+                    </span>
                   ) : (
-                    <span className="text-neutral-300 text-[11px]">—</span>
+                    <span className="text-neutral-400 bg-neutral-100 px-1.5 py-0.5 rounded-md text-[10px]">
+                      未打卡
+                    </span>
                   )}
                 </div>
               </div>
@@ -297,11 +307,15 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
             {/* Bottom Tag */}
             <div className="pt-2 border-t border-neutral-100 text-[10px] text-center font-medium">
               {day.isToday ? (
-                <span className="text-emerald-700 font-semibold">今日</span>
+                <span className="text-emerald-700 font-bold bg-emerald-100/80 px-2 py-0.5 rounded-full">
+                  今日 {day.isAllDone ? '已达成' : '进行中'}
+                </span>
               ) : day.isFuture ? (
                 <span className="text-neutral-400">未开始</span>
               ) : day.isAllDone ? (
-                <span className="text-emerald-600">已圆满</span>
+                <span className="text-emerald-800 bg-emerald-100/90 font-bold px-2 py-0.5 rounded-full shadow-2xs">
+                  ★ 已圆满
+                </span>
               ) : (
                 <span className="text-neutral-400">未完成</span>
               )}
