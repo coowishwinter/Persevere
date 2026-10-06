@@ -82,6 +82,91 @@ export function getWeekRange(dateStr: string): {
   };
 }
 
+export interface HeatmapDayCell {
+  date: string;
+  dayOfMonth: number;
+  month: number;
+  year: number;
+  dayOfWeek: number; // 0 Sun, 1 Mon...
+  isSunday: boolean;
+  isInYear: boolean;
+  isToday: boolean;
+  isFuture: boolean;
+}
+
+export interface HeatmapWeekCol {
+  weekIndex: number;
+  days: HeatmapDayCell[];
+  monthLabel?: string; // e.g. "1月", "2月" when a month starts in this week
+}
+
+/**
+ * Generate 52-53 weeks of Monday-to-Sunday columns for the whole year
+ */
+export function getYearPanoramicHeatmap(year: number, todayStr: string): {
+  weeks: HeatmapWeekCol[];
+  monthLabels: { month: number; label: string; weekIndex: number }[];
+} {
+  const jan1 = new Date(year, 0, 1);
+  const dec31 = new Date(year, 11, 31);
+
+  // Start from Monday on or before Jan 1
+  const startDayOfWeek = jan1.getDay(); // 0 is Sun
+  const padStartDays = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1;
+  const startDate = new Date(year, 0, 1 - padStartDays);
+
+  const weeks: HeatmapWeekCol[] = [];
+  const monthLabels: { month: number; label: string; weekIndex: number }[] = [];
+  const seenMonths = new Set<number>();
+
+  let curr = new Date(startDate);
+  let weekIdx = 0;
+
+  while (curr <= dec31 || curr.getDay() !== 1) {
+    const weekDays: HeatmapDayCell[] = [];
+    let weekMonthLabel: string | undefined;
+
+    for (let d = 0; d < 7; d++) {
+      const dateStr = formatDateString(curr);
+      const isSun = curr.getDay() === 0;
+      const curMonth = curr.getMonth() + 1;
+      const inYear = curr.getFullYear() === year;
+
+      if (inYear && !seenMonths.has(curMonth) && curr.getDate() <= 7) {
+        seenMonths.add(curMonth);
+        weekMonthLabel = `${curMonth}月`;
+        monthLabels.push({ month: curMonth, label: `${curMonth}月`, weekIndex: weekIdx });
+      }
+
+      weekDays.push({
+        date: dateStr,
+        dayOfMonth: curr.getDate(),
+        month: curMonth,
+        year: curr.getFullYear(),
+        dayOfWeek: curr.getDay(),
+        isSunday: isSun,
+        isInYear: inYear,
+        isToday: dateStr === todayStr,
+        isFuture: dateStr > todayStr,
+      });
+
+      curr.setDate(curr.getDate() + 1);
+    }
+
+    weeks.push({
+      weekIndex: weekIdx,
+      days: weekDays,
+      monthLabel: weekMonthLabel,
+    });
+    weekIdx++;
+
+    // Safety brake
+    if (weekIdx > 54) break;
+  }
+
+  return { weeks, monthLabels };
+}
+
 export interface MonthCalendarCell {
   date: string;
   dayNumber: number;

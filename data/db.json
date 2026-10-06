@@ -1,16 +1,6 @@
 {
   "habits": null,
-  "records": {
-    "2026-10-05": {
-      "date": "2026-10-05",
-      "habits": {
-        "habit_exercise": {
-          "completed": true,
-          "duration": 45
-        }
-      }
-    }
-  },
+  "records": {},
   "weeklyReviews": {},
-  "lastUpdated": "2026-10-05T13:08:01.146Z"
+  "lastUpdated": "2026-10-05T17:48:00.000Z"
 }

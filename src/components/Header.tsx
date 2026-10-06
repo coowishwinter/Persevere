@@ -63,7 +63,7 @@ export const Header: React.FC<HeaderProps> = ({
                   : 'text-neutral-500 hover:text-neutral-900'
               }`}
             >
-              月度统计
+              全景热力
             </button>
           </nav>
 

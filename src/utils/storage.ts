@@ -3,7 +3,7 @@ import { addDays, formatDateString, getTodayString } from './dateUtils';
 
 const STORAGE_KEYS = {
   HABITS: 'rili_habits_v2',
-  RECORDS: 'rili_records_v2',
+  RECORDS: 'rili_records_v3',
   WEEKLY_REVIEWS: 'rili_weekly_reviews_v1',
   PROFILE: 'rili_profile_v1',
 };
@@ -104,28 +104,21 @@ export function generateSeedRecords(todayStr: string): Record<string, DailyRecor
     const bkSample = bookSamples[(offset + 50) % bookSamples.length];
 
     if (offset === 0) {
-      // Today: exercise done, reading partially done or ready to check
+      // Today: strictly uncompleted initial state awaiting user check-in
       records[curDate] = {
         date: curDate,
         habits: {
           habit_exercise: {
-            completed: true,
-            value: 45,
-            duration: 45,
-            subType: '力量训练',
-            notes: '肩部推举 + 侧平举，状态饱满',
-            intensity: 'moderate',
+            completed: false,
+            value: 0,
           },
           habit_reading: {
-            completed: true,
-            value: 26,
-            duration: 35,
-            subType: '《纳瓦尔宝典》',
-            notes: '读完关于判断力与杠杆的章节，醍醐灌顶',
+            completed: false,
+            value: 0,
           },
         },
-        dailyNote: '新的一周状态绝佳，锻炼和阅读均已按时完成！',
-        mood: 5,
+        dailyNote: '',
+        mood: undefined,
         updatedAt: new Date().toISOString(),
       };
     } else if (isRestDay) {
@@ -265,7 +258,16 @@ export function getDailyRecord(dateStr: string, records: Record<string, DailyRec
   }
   return {
     date: dateStr,
-    habits: {},
+    habits: {
+      habit_exercise: {
+        completed: false,
+        value: 0,
+      },
+      habit_reading: {
+        completed: false,
+        value: 0,
+      },
+    },
     dailyNote: '',
     mood: undefined,
   };

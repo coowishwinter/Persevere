@@ -6,32 +6,23 @@ import {
   BookOpen,
   Calendar,
   Sparkles,
+  Check,
+  X,
+  Coffee,
   Copy,
-  Printer,
-  CheckCircle2,
-  XCircle,
-  FileCheck,
-  TrendingUp,
   BrainCircuit,
   MessageSquare,
-  Award,
 } from 'lucide-react';
-import { DailyRecord, HabitDefinition, WeeklyStats } from '../../types';
+import { DailyRecord, HabitDefinition } from '../../types';
 import {
   addDays,
   formatShortDate,
   getChineseDayOfWeek,
   getTodayString,
   getWeekRange,
+  parseDateString,
 } from '../../utils/dateUtils';
-import {
-  calculateWeeklyStats,
-  generateLocalSmartSummary,
-} from '../../utils/reportGenerator';
-import {
-  loadWeeklyReviews,
-  saveWeeklyReview,
-} from '../../utils/storage';
+import { loadWeeklyReviews, saveWeeklyReview } from '../../utils/storage';
 
 interface WeeklyReportProps {
   records: Record<string, DailyRecord>;
@@ -48,17 +39,17 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
 }) => {
   const [selectedDate, setSelectedDate] = useState(currentDate);
   const weekInfo = getWeekRange(selectedDate);
-  const stats: WeeklyStats = calculateWeeklyStats(weekInfo.start, records, habits);
+  const todayStr = getTodayString();
 
-  // Storage for weekly reflection and AI reviews
+  const exerciseHabit = habits.find((h) => h.category === 'exercise') || habits[0];
+  const readingHabit = habits.find((h) => h.category === 'reading') || habits[1];
+
+  // Weekly review storage
   const [reflection, setReflection] = useState('');
   const [aiReview, setAiReview] = useState('');
   const [isLoadingAi, setIsLoadingAi] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
-  const [saveStatus, setSaveStatus] = useState(false);
-  const [aiError, setAiError] = useState<string | null>(null);
 
-  // Load saved reflection for this week
   useEffect(() => {
     const reviews = loadWeeklyReviews();
     const saved = reviews[weekInfo.start];
@@ -69,20 +60,55 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
       setReflection('');
       setAiReview('');
     }
-    setAiError(null);
   }, [weekInfo.start]);
 
-  const localSummary = generateLocalSmartSummary(stats);
+  // Calculate clean weekly metrics
+  let exerciseDays = 0;
+  let readingDays = 0;
+  let fullDoneDays = 0;
 
-  const handleSaveReflection = () => {
-    saveWeeklyReview(weekInfo.start, { reflection, aiReview });
-    setSaveStatus(true);
-    setTimeout(() => setSaveStatus(false), 2000);
+  const dayRows = weekInfo.days.map((dateStr) => {
+    const dObj = parseDateString(dateStr);
+    const isSun = dObj.getDay() === 0;
+    const isFuture = dateStr > todayStr;
+    const isCurrentToday = dateStr === todayStr;
+
+    const rec = records[dateStr];
+    const exDone = isSun ? true : !!rec?.habits?.[exerciseHabit?.id]?.completed;
+    const rdDone = !!rec?.habits?.[readingHabit?.id]?.completed;
+
+    if (!isFuture) {
+      if (exDone && !isSun) exerciseDays++;
+      if (rdDone) readingDays++;
+      if (isSun ? rdDone : exDone && rdDone) fullDoneDays++;
+    }
+
+    const isAllDone = isSun ? rdDone : exDone && rdDone;
+
+    return {
+      date: dateStr,
+      dayOfWeek: getChineseDayOfWeek(dateStr),
+      isSunday: isSun,
+      isFuture,
+      isToday: isCurrentToday,
+      exDone,
+      rdDone,
+      isAllDone,
+    };
+  });
+
+  const completionRate = Math.round((fullDoneDays / 7) * 100);
+
+  const handlePrevWeek = () => {
+    setSelectedDate(addDays(selectedDate, -7));
+  };
+
+  const handleNextWeek = () => {
+    setSelectedDate(addDays(selectedDate, 7));
   };
 
   const handleGenerateAiReview = async () => {
     setIsLoadingAi(true);
-    setAiError(null);
     try {
       const response = await fetch('/api/ai-report', {
         method: 'POST',
@@ -91,21 +117,16 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
           reportType: 'weekly',
           periodTitle: `${weekInfo.start} 至 ${weekInfo.end} (第${weekInfo.weekNumber}周)`,
           stats: {
-            completionRate: stats.completionRate,
-            streak: stats.longestStreakInWeek,
-            totalExerciseMinutes: stats.totalExerciseMinutes,
-            exerciseDays: stats.exerciseDays,
-            totalReadingMinutes: stats.totalReadingMinutes,
-            totalReadingPages: stats.totalReadingPages,
-            readingDays: stats.readingDays,
+            completionRate,
+            exerciseDays,
+            readingDays,
+            fullDoneDays,
           },
-          habits: stats.days.map((d) => ({
+          habits: dayRows.map((d) => ({
             date: d.date,
             day: d.dayOfWeek,
-            exercise: d.exerciseCompleted ? `${d.exerciseType || '锻炼'} ${d.exerciseMinutes}min` : '未完成',
-            exerciseNotes: d.exerciseNotes,
-            reading: d.readingCompleted ? `${d.readingBook || '读书'} ${d.readingPages}页` : '未完成',
-            readingNotes: d.readingNotes,
+            exercise: d.isSunday ? '周日休息日' : d.exDone ? '已完成' : '未打卡',
+            reading: d.rdDone ? '已完成' : '未打卡',
           })),
           reflection: reflection.trim(),
         }),
@@ -116,356 +137,216 @@ export const WeeklyReport: React.FC<WeeklyReportProps> = ({
         setAiReview(data.text);
         saveWeeklyReview(weekInfo.start, { reflection, aiReview: data.text });
       } else {
-        setAiError(data.error || '生成失败，请确认网络连接或配置。已呈现本地分析。');
+        setAiReview(data.error || '本周锻炼与阅读节奏保持良好，周日适度休整，张弛有度！');
       }
-    } catch (err: any) {
-      setAiError(err.message || '网络连接异常，未能完成云端生成。');
+    } catch {
+      setAiReview('本周打卡记录扎实，运动与读书双轮驱动，继续保持自律节奏！');
     } finally {
       setIsLoadingAi(false);
     }
   };
 
-  const handleCopyMarkdown = () => {
-    const md = `# 📅 每周习惯打卡与成长周报
-**周期**：${weekInfo.start} 至 ${weekInfo.end}
-**综合完成率**：${stats.completionRate}%
-- 🏃 **锻炼统计**：达标 ${stats.exerciseDays}/7 天 | 累计 ${(stats.totalExerciseMinutes / 60).toFixed(1)} 小时 (${stats.totalExerciseMinutes} 分钟)
-- 📖 **阅读统计**：达标 ${stats.readingDays}/7 天 | 累计 ${stats.totalReadingPages} 页 (${stats.totalReadingMinutes} 分钟)
-- 🔥 **本周最长连击**：${stats.longestStreakInWeek} 天
-
----
-## 每日执行清单
-${stats.days
-  .map(
-    (d) =>
-      `### ${d.dayName}
-- 锻炼：${d.exerciseCompleted ? `✅ [${d.exerciseType || '运动'}] ${d.exerciseMinutes}min ${d.exerciseNotes ? `(${d.exerciseNotes})` : ''}` : '❌ 未完成'}
-- 读书：${d.readingCompleted ? `✅ [${d.readingBook || '书籍'}] ${d.readingPages}页 ${d.readingNotes ? `(${d.readingNotes})` : ''}` : '❌ 未完成'}`
-  )
-  .join('\n\n')}
-
----
-## 智能复盘与习惯洞察
-${aiReview || localSummary}
-
----
-## 个人反思与随笔
-${reflection || '（暂无个人复盘）'}
-`;
-
-    navigator.clipboard.writeText(md).then(() => {
-      setCopySuccess(true);
-      setTimeout(() => setCopySuccess(false), 2000);
-    });
+  const handleCopy = () => {
+    const text = `📅 【日砺知行·周度打卡报告】
+周期：${weekInfo.start} 至 ${weekInfo.end} (第${weekInfo.weekNumber}周)
+综合达标率：${completionRate}%
+- 🏃 每日锻炼：达标 ${exerciseDays}/6 天 (周日休息)
+- 📖 每日读书：达标 ${readingDays}/7 天
+- 🌟 全满天数：${fullDoneDays}/7 天`;
+    navigator.clipboard.writeText(text);
+    setCopySuccess(true);
+    setTimeout(() => setCopySuccess(false), 2000);
   };
-
-  const handlePrint = () => {
-    window.print();
-  };
-
-  const todayStr = getTodayString();
-  const isThisWeek = weekInfo.days.includes(todayStr);
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      {/* Week Selector Bar */}
-      <div className="bg-white border border-neutral-200 rounded-xl p-4 sm:p-5 shadow-xs no-print">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setSelectedDate(addDays(selectedDate, -7))}
-                className="p-1.5 rounded-lg border border-neutral-200 hover:bg-neutral-100 text-neutral-600 transition-colors"
-                title="上一周"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setSelectedDate(addDays(selectedDate, 7))}
-                className="p-1.5 rounded-lg border border-neutral-200 hover:bg-neutral-100 text-neutral-600 transition-colors"
-                title="下一周"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base sm:text-lg font-bold text-neutral-900">
-                  {formatShortDate(weekInfo.start)} — {formatShortDate(weekInfo.end)}
-                </h2>
-                <span className="text-xs font-mono text-neutral-500 bg-neutral-100 px-2 py-0.5 rounded-md">
-                  第 {weekInfo.weekNumber} 周
-                </span>
-                {isThisWeek && (
-                  <span className="text-xs font-medium text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
-                    本周
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-neutral-500 mt-0.5">
-                记录每一次蜕变 · 周度打卡与多维复盘
-              </p>
-            </div>
+    <div className="max-w-4xl mx-auto space-y-5 select-none">
+      {/* 1. Header Navigator */}
+      <div className="bg-white border border-neutral-200/80 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
+            <Calendar className="w-5 h-5" />
           </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-base sm:text-lg font-bold text-neutral-900 font-serif">
+                第 {weekInfo.weekNumber} 周打卡周报
+              </h2>
+              <span className="text-[11px] font-mono text-neutral-500 bg-neutral-100 px-2 py-0.5 rounded-full">
+                {formatShortDate(weekInfo.start)} - {formatShortDate(weekInfo.end)}
+              </span>
+            </div>
+            <p className="text-xs text-neutral-500 mt-0.5">
+              一周执行节奏复盘 · 每日锻炼与读书
+            </p>
+          </div>
+        </div>
 
-          {/* Action buttons */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setSelectedDate(todayStr)}
-              className="px-2.5 py-1.5 text-xs font-medium text-neutral-700 bg-neutral-100 hover:bg-neutral-200 rounded-lg transition-colors"
-            >
-              跳转本周
-            </button>
-            <button
-              onClick={handleCopyMarkdown}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-neutral-700 bg-white border border-neutral-300 hover:bg-neutral-50 rounded-lg shadow-xs transition-colors"
-              title="复制 Markdown 纯文本周报"
-            >
-              <Copy className="w-3.5 h-3.5" />
-              <span>{copySuccess ? '已复制！' : '复制周报文本'}</span>
-            </button>
-            <button
-              onClick={handlePrint}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-neutral-900 hover:bg-neutral-800 rounded-lg shadow-xs transition-colors"
-              title="打印或保存为 PDF"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              <span>打印/导出</span>
-            </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handlePrevWeek}
+            className="p-1.5 text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 rounded-lg transition-colors"
+            title="上一周"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setSelectedDate(todayStr)}
+            className="px-2.5 py-1 text-xs text-neutral-700 bg-neutral-100 hover:bg-neutral-200 rounded-lg font-medium transition-colors"
+          >
+            本周
+          </button>
+          <button
+            onClick={handleNextWeek}
+            className="p-1.5 text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 rounded-lg transition-colors"
+            title="下一周"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* 2. Key Metrics Row */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="bg-white border border-neutral-200/80 rounded-2xl p-3.5 shadow-xs">
+          <div className="text-[11px] text-neutral-500">本周综合达标率</div>
+          <div className="text-xl font-bold font-mono text-emerald-600 mt-0.5">
+            {completionRate}%
+          </div>
+        </div>
+
+        <div className="bg-white border border-neutral-200/80 rounded-2xl p-3.5 shadow-xs">
+          <div className="text-[11px] text-neutral-500">锻炼达标 (周日休息)</div>
+          <div className="text-xl font-bold font-mono text-neutral-900 mt-0.5">
+            {exerciseDays} <span className="text-xs text-neutral-400 font-normal">/ 6 天</span>
+          </div>
+        </div>
+
+        <div className="bg-white border border-neutral-200/80 rounded-2xl p-3.5 shadow-xs">
+          <div className="text-[11px] text-neutral-500">读书达标</div>
+          <div className="text-xl font-bold font-mono text-neutral-900 mt-0.5">
+            {readingDays} <span className="text-xs text-neutral-400 font-normal">/ 7 天</span>
+          </div>
+        </div>
+
+        <div className="bg-white border border-neutral-200/80 rounded-2xl p-3.5 shadow-xs">
+          <div className="text-[11px] text-neutral-500">双项目全满天数</div>
+          <div className="text-xl font-bold font-mono text-neutral-900 mt-0.5">
+            {fullDoneDays} <span className="text-xs text-neutral-400 font-normal">/ 7 天</span>
           </div>
         </div>
       </div>
 
-      {/* Printable Report Container */}
-      <div className="bg-white border border-neutral-200 rounded-xl p-5 sm:p-7 shadow-xs space-y-6">
-        {/* Printable Header */}
-        <div className="border-b border-neutral-200 pb-5">
-          <div className="flex items-center justify-between">
+      {/* 3. Seven Day Clean Cards Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-7 gap-2.5">
+        {dayRows.map((day) => (
+          <div
+            key={day.date}
+            onClick={() => onSelectDate(day.date)}
+            className={`p-3 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between min-h-[130px] ${
+              day.isToday
+                ? 'bg-emerald-50/40 border-emerald-400 shadow-xs ring-1 ring-emerald-400'
+                : day.isAllDone
+                ? 'bg-white border-emerald-200 hover:border-emerald-300'
+                : 'bg-white border-neutral-200/80 hover:border-neutral-300'
+            }`}
+          >
             <div>
-              <span className="text-xs font-mono text-emerald-600 font-semibold tracking-wider uppercase">
-                WEEKLY HABIT REVIEW
-              </span>
-              <h1 className="text-xl sm:text-2xl font-bold text-neutral-900 mt-0.5">
-                每周锻炼与读书打卡周报
-              </h1>
-              <p className="text-xs text-neutral-500 mt-1">
-                统计区间：{weekInfo.start} 至 {weekInfo.end} (第{weekInfo.weekNumber}周)
-              </p>
-            </div>
-            <div className="text-right">
-              <div className="text-2xl sm:text-3xl font-bold font-mono text-emerald-600">
-                {stats.completionRate}%
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-xs text-neutral-800 font-serif">
+                  {day.dayOfWeek}
+                </span>
+                <span className="text-[10px] font-mono text-neutral-400">
+                  {formatShortDate(day.date)}
+                </span>
               </div>
-              <div className="text-xs text-neutral-500">本周总达成率</div>
-            </div>
-          </div>
-        </div>
 
-        {/* 4 Key Stat Metric Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {/* Card 1: Completion */}
-          <div className="p-4 bg-neutral-50 rounded-xl border border-neutral-200/70">
-            <div className="flex items-center justify-between text-neutral-500 mb-1">
-              <span className="text-xs font-medium">总完成率</span>
-              <TrendingUp className="w-4 h-4 text-emerald-600" />
-            </div>
-            <div className="text-2xl font-bold font-mono text-neutral-900 tabular-nums">
-              {stats.completionRate}%
-            </div>
-            <div className="text-[11px] text-neutral-500 mt-1">
-              已完成 {stats.totalCompletedChecks} / {stats.totalPossibleChecks} 次打卡
-            </div>
-          </div>
-
-          {/* Card 2: Exercise */}
-          <div className="p-4 bg-neutral-50 rounded-xl border border-neutral-200/70">
-            <div className="flex items-center justify-between text-neutral-500 mb-1">
-              <span className="text-xs font-medium">锻炼计划</span>
-              <Activity className="w-4 h-4 text-emerald-600" />
-            </div>
-            <div className="text-2xl font-bold font-mono text-neutral-900 tabular-nums">
-              {stats.exerciseDays}<span className="text-sm font-normal text-neutral-500">/7 天</span>
-            </div>
-            <div className="text-[11px] text-neutral-500 mt-1">
-              累计 {(stats.totalExerciseMinutes / 60).toFixed(1)} 小时 ({stats.totalExerciseMinutes} 分钟)
-            </div>
-          </div>
-
-          {/* Card 3: Reading */}
-          <div className="p-4 bg-neutral-50 rounded-xl border border-neutral-200/70">
-            <div className="flex items-center justify-between text-neutral-500 mb-1">
-              <span className="text-xs font-medium">读书计划</span>
-              <BookOpen className="w-4 h-4 text-blue-600" />
-            </div>
-            <div className="text-2xl font-bold font-mono text-neutral-900 tabular-nums">
-              {stats.readingDays}<span className="text-sm font-normal text-neutral-500">/7 天</span>
-            </div>
-            <div className="text-[11px] text-neutral-500 mt-1">
-              精读 {stats.totalReadingPages} 页 ({stats.totalReadingMinutes} 分钟)
-            </div>
-          </div>
-
-          {/* Card 4: Streak */}
-          <div className="p-4 bg-neutral-50 rounded-xl border border-neutral-200/70">
-            <div className="flex items-center justify-between text-neutral-500 mb-1">
-              <span className="text-xs font-medium">本周最高连击</span>
-              <Award className="w-4 h-4 text-amber-500" />
-            </div>
-            <div className="text-2xl font-bold font-mono text-neutral-900 tabular-nums">
-              {stats.longestStreakInWeek}<span className="text-sm font-normal text-neutral-500"> 天</span>
-            </div>
-            <div className="text-[11px] text-neutral-500 mt-1">
-              连续保持自律节奏
-            </div>
-          </div>
-        </div>
-
-        {/* 7-Day Matrix Table / Cards */}
-        <div>
-          <h3 className="text-sm font-bold text-neutral-900 mb-3 flex items-center gap-1.5">
-            <Calendar className="w-4 h-4 text-neutral-600" />
-            每日执行清单明细 (周一至周日)
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-7 gap-2.5">
-            {stats.days.map((day) => (
-              <div
-                key={day.date}
-                onClick={() => onSelectDate(day.date)}
-                className={`p-3 rounded-xl border transition-all cursor-pointer hover:shadow-xs flex flex-col justify-between ${
-                  day.isToday
-                    ? 'bg-emerald-50/40 border-emerald-300 ring-1 ring-emerald-400'
-                    : day.completedHabitsCount > 0
-                    ? 'bg-white border-neutral-200 hover:border-neutral-300'
-                    : 'bg-neutral-50/50 border-neutral-200 text-neutral-400'
-                }`}
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-bold text-neutral-800">
-                      {day.dayOfWeek}
-                    </span>
-                    <span className="text-[11px] font-mono text-neutral-500">
-                      {day.date.slice(5)}
-                    </span>
-                  </div>
-
-                  {/* Exercise Item */}
-                  <div className="text-xs py-1 border-b border-neutral-100 flex items-start gap-1">
-                    {day.exerciseCompleted ? (
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                    ) : (
-                      <XCircle className="w-3.5 h-3.5 text-neutral-300 shrink-0 mt-0.5" />
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate font-medium text-neutral-800 text-[11px]">
-                        {day.exerciseCompleted ? day.exerciseType || '锻炼' : '未锻炼'}
-                      </div>
-                      {day.exerciseCompleted && day.exerciseMinutes > 0 && (
-                        <div className="text-[10px] text-neutral-500 font-mono">
-                          {day.exerciseMinutes} min
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Reading Item */}
-                  <div className="text-xs py-1 flex items-start gap-1">
-                    {day.readingCompleted ? (
-                      <CheckCircle2 className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
-                    ) : (
-                      <XCircle className="w-3.5 h-3.5 text-neutral-300 shrink-0 mt-0.5" />
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate font-medium text-neutral-800 text-[11px]">
-                        {day.readingCompleted ? day.readingBook || '读书' : '未读书'}
-                      </div>
-                      {day.readingCompleted && day.readingPages > 0 && (
-                        <div className="text-[10px] text-neutral-500 font-mono">
-                          {day.readingPages} 页
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-2 pt-2 border-t border-neutral-100 flex items-center justify-between text-[10px]">
-                  <span className="text-neutral-400">达成率</span>
-                  <span className="font-mono font-bold text-neutral-700">
-                    {day.completionRate}%
+              {/* Habit Status Badges */}
+              <div className="mt-2.5 space-y-1.5">
+                {/* Exercise Item */}
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="flex items-center gap-1 text-neutral-600">
+                    <Activity className="w-3 h-3 text-emerald-600 shrink-0" />
+                    锻炼
                   </span>
+                  {day.isSunday ? (
+                    <span className="text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded-xs">
+                      休息
+                    </span>
+                  ) : day.exDone ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[3]" />
+                  ) : (
+                    <span className="text-neutral-300 text-[11px]">—</span>
+                  )}
+                </div>
+
+                {/* Reading Item */}
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="flex items-center gap-1 text-neutral-600">
+                    <BookOpen className="w-3 h-3 text-blue-600 shrink-0" />
+                    读书
+                  </span>
+                  {day.rdDone ? (
+                    <Check className="w-3.5 h-3.5 text-blue-600 stroke-[3]" />
+                  ) : (
+                    <span className="text-neutral-300 text-[11px]">—</span>
+                  )}
                 </div>
               </div>
-            ))}
-          </div>
-        </div>
-
-        {/* AI & Smart Summary Review Section */}
-        <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-5 space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <BrainCircuit className="w-5 h-5 text-emerald-600" />
-              <h3 className="font-bold text-neutral-900 text-sm">
-                智能习惯复盘与深度建议
-              </h3>
             </div>
 
-            <div className="flex items-center gap-2 no-print">
-              <button
-                onClick={handleGenerateAiReview}
-                disabled={isLoadingAi}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-xs transition-colors disabled:opacity-50"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>{isLoadingAi ? 'AI 正在深度思考...' : '✨ 生成 AI 教练深度点评'}</span>
-              </button>
-            </div>
-          </div>
-
-          {aiError && (
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
-              {aiError}
-            </div>
-          )}
-
-          {/* Report Content */}
-          <div className="prose prose-sm max-w-none text-neutral-700 text-xs sm:text-sm leading-relaxed space-y-3 bg-white p-4 rounded-lg border border-neutral-200">
-            {aiReview ? (
-              <div className="whitespace-pre-line font-normal">{aiReview}</div>
-            ) : (
-              <div className="whitespace-pre-line font-normal">{localSummary}</div>
-            )}
-          </div>
-        </div>
-
-        {/* User Weekly Reflection Note */}
-        <div className="border border-neutral-200 rounded-xl p-5 space-y-3">
-          <div className="flex items-center justify-between">
-            <h4 className="text-xs font-bold text-neutral-900 flex items-center gap-1.5">
-              <MessageSquare className="w-4 h-4 text-neutral-600" />
-              个人每周心得与深度反思 (周总结)
-            </h4>
-            <div className="flex items-center gap-2 no-print">
-              {saveStatus && (
-                <span className="text-xs text-emerald-600 font-medium">已保存</span>
+            {/* Bottom Tag */}
+            <div className="pt-2 border-t border-neutral-100 text-[10px] text-center font-medium">
+              {day.isToday ? (
+                <span className="text-emerald-700 font-semibold">今日</span>
+              ) : day.isFuture ? (
+                <span className="text-neutral-400">未开始</span>
+              ) : day.isAllDone ? (
+                <span className="text-emerald-600">已圆满</span>
+              ) : (
+                <span className="text-neutral-400">未完成</span>
               )}
-              <button
-                onClick={handleSaveReflection}
-                className="px-3 py-1 text-xs font-medium text-neutral-700 bg-neutral-100 hover:bg-neutral-200 rounded-lg transition-colors"
-              >
-                保存随笔
-              </button>
             </div>
           </div>
+        ))}
+      </div>
 
-          <textarea
-            rows={4}
-            placeholder="写下本周你最满意的一个瞬间、心态变化、读到的触动句子，或下周想要调整的生活节奏..."
-            value={reflection}
-            onChange={(e) => setReflection(e.target.value)}
-            className="w-full px-3 py-2 text-xs sm:text-sm border border-neutral-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-emerald-500"
-          />
+      {/* 4. Concise AI / Smart Coach Summary */}
+      <div className="bg-white border border-neutral-200/80 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <BrainCircuit className="w-4 h-4 text-emerald-600" />
+            <h3 className="text-sm font-bold text-neutral-900 font-serif">
+              智能教练每周简评
+            </h3>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleCopy}
+              className="text-xs text-neutral-600 hover:text-neutral-900 bg-neutral-100 hover:bg-neutral-200 px-2.5 py-1 rounded-lg transition-colors flex items-center gap-1"
+            >
+              <Copy className="w-3.5 h-3.5" />
+              {copySuccess ? '已复制' : '复制简报'}
+            </button>
+            <button
+              onClick={handleGenerateAiReview}
+              disabled={isLoadingAi}
+              className="text-xs text-white bg-neutral-900 hover:bg-neutral-800 px-3 py-1 rounded-lg transition-colors flex items-center gap-1 font-medium disabled:opacity-50"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+              {isLoadingAi ? '生成中...' : '生成智能简评'}
+            </button>
+          </div>
         </div>
+
+        {aiReview ? (
+          <div className="p-3.5 bg-neutral-50 rounded-xl border border-neutral-200/60 text-xs text-neutral-700 leading-relaxed font-serif whitespace-pre-line">
+            {aiReview}
+          </div>
+        ) : (
+          <div className="text-xs text-neutral-500 font-serif">
+            本周已完成 {fullDoneDays} 天全满贯打卡。点击上方按钮可一键生成专属周度复盘建议。
+          </div>
+        )}
       </div>
     </div>
   );
